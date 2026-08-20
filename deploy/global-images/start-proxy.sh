@@ -73,6 +73,19 @@ fi
 
 bool() { [[ "$1" == "1" ]] && echo "true" || echo "false"; }
 
+# MEMORY_HUB_PROXY_PUBLIC_URL → injection.externalGatewayUrl
+# Prompt 里 skill-bridge / memory-bridge / session-bridge 的 curl base。
+# 未设则省略该字段，Proxy 启动时回落到容器网卡 IP（仅本机 Docker 可用）。
+# 公司 Nginx / 域名入口必须设成对外 origin（不要带 :8096 或路径）。
+INJECTION_EXTERNAL_YAML=""
+if [[ -n "${MEMORY_HUB_PROXY_PUBLIC_URL:-}" ]]; then
+  _ext_gw="${MEMORY_HUB_PROXY_PUBLIC_URL%/}"
+  INJECTION_EXTERNAL_YAML="  externalGatewayUrl: \"${_ext_gw}\""
+  info "injection.externalGatewayUrl=${_ext_gw}"
+else
+  info "MEMORY_HUB_PROXY_PUBLIC_URL 未设 — bridge curl 回落到容器网卡 IP；域名 / 公司 Nginx 部署请在 .env 显式设置"
+fi
+
 info "生成 proxy config → $CONFIG_FILE  (auth=$(bool $PROXY_ENABLE_AUTH) session-init=$(bool $PROXY_ENABLE_SESSION_INIT) tdai=$(bool $PROXY_ENABLE_TDAI))"
 cat > "$CONFIG_FILE" <<YAML
 # 由 start-proxy.sh 自动生成 —— 每次启动覆盖，请不要手动改。
@@ -127,6 +140,11 @@ sessionInit:
 costGuard:
   enabled: false
 
+# 开源单机不接腾讯内部 MemoryPlus 计费；url 留空跳过连通性探针，也不上报。
+# 不写这段会回落到默认 http://gateway.example.com:8000/UpdateMemoryPlusUsage，启动打 WARN。
+creditReport:
+  url: ""
+
 # 打开 skill + knowledge + tdai-memory 三个注入器；
 # knowledge 依赖 memory-hub 起来，否则 hook 内部会降级为空块。
 injection:
@@ -135,6 +153,7 @@ injection:
     - skill
     - knowledge
     - tdai-memory
+${INJECTION_EXTERNAL_YAML}
 
 redis:
   enabled: false

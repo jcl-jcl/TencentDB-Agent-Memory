@@ -438,3 +438,6 @@ http://<proxy-host>:<port>/<agent-source>/<spaceId>
 其它安装形态（OpenClaw、Hermes、CodeBuddy、SDK、源码启动、K8s、平台说明），参见
 [`deploy/global-images/README.md`](./deploy/global-images/README.md) 与
 [`MemoryCore/README_CN.md`](./MemoryCore/README_CN.md)。
+
+三件套 `.env` / 能力开关（默认开或关、作用、怎么改）见
+[`deploy/global-images/CONFIG_CN.md`](./deploy/global-images/CONFIG_CN.md)。

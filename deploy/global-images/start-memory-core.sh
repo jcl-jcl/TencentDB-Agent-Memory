@@ -51,6 +51,31 @@ rm_container_if_exists "$CONTAINER"
 CORE_CONFIG_DIR="${MEMORY_CORE_CONFIG_DIR:-$SCRIPT_DIR/.memory-core-config}"
 mkdir -p "$CORE_CONFIG_DIR"
 CORE_CONFIG_FILE="$CORE_CONFIG_DIR/tdai-gateway.yaml"
+
+# 外部 embedding：MEMORY_EMBEDDING_PROVIDER=none（默认）关闭向量，只走 BM25/FTS。
+# 配成 openai 兼容端点时必须同时有 model + dimensions；baseUrl/apiKey 未填则复用 MEMORY_LLM_*。
+# 请求体默认不带 dimensions（sendDimensions=false），避免部分模型 400。
+MEMORY_EMBEDDING_PROVIDER="${MEMORY_EMBEDDING_PROVIDER:-none}"
+if [[ "$MEMORY_EMBEDDING_PROVIDER" == "none" || -z "$MEMORY_EMBEDDING_PROVIDER" ]]; then
+  EMBEDDING_YAML=$'  embedding:\n    provider: none'
+else
+  _emb_url="${MEMORY_EMBEDDING_BASE_URL:-${MEMORY_LLM_BASE_URL:-}}"
+  _emb_key="${MEMORY_EMBEDDING_API_KEY:-${MEMORY_LLM_API_KEY:-}}"
+  _emb_model="${MEMORY_EMBEDDING_MODEL:-}"
+  _emb_dims="${MEMORY_EMBEDDING_DIMENSIONS:-0}"
+  _emb_send="${MEMORY_EMBEDDING_SEND_DIMENSIONS:-false}"
+  EMBEDDING_YAML=$(cat <<EOF
+  embedding:
+    provider: ${MEMORY_EMBEDDING_PROVIDER}
+    baseUrl: "${_emb_url}"
+    apiKey: "${_emb_key}"
+    model: "${_emb_model}"
+    dimensions: ${_emb_dims}
+    sendDimensions: ${_emb_send}
+EOF
+)
+fi
+
 info "生成 gateway config → $CORE_CONFIG_FILE"
 cat > "$CORE_CONFIG_FILE" <<YAML
 # 由 start-memory-core.sh 自动生成 —— 每次启动覆盖，请不要手动改。
@@ -98,8 +123,7 @@ memory:
     strategy: hybrid
     timeoutMs: 5000
   storeBackend: sqlite
-  embedding:
-    provider: none
+${EMBEDDING_YAML}
 
 # ── Skill 模块 ──
 skill:
@@ -172,7 +196,9 @@ verify_user_key() {
   [[ "$code" == "200" ]]
 }
 
-info "初始化 admin user（username=${MEMORY_CORE_ADMIN_USERNAME}, key 持久化 → $ADMIN_KEY_FILE）..."
+# 必须用 ${ADMIN_KEY_FILE}：macOS /bin/bash 3.2 会把紧跟的全角「）」算进变量名，
+# 在 set -u 下报 ADMIN_KEY_FILE）: unbound variable（ASCII 的 ADMIN_KEY_FILE 实际已赋值）。
+info "初始化 admin user（username=${MEMORY_CORE_ADMIN_USERNAME}, key 持久化 → ${ADMIN_KEY_FILE}）..."
 
 # 生成随机 key（首次 init-admin 用；若之前有 file 就复用）
 if [[ -s "$ADMIN_KEY_FILE" ]]; then

@@ -129,4 +129,5 @@ docker build --platform "$PLATFORM" -t "$IMAGE_NAME:$IMAGE_TAG" "$CTX_DIR"
 
 echo ""
 echo "[build-combined] ✅ done: $IMAGE_NAME:$IMAGE_TAG"
-echo "[build-combined] context 保留在 $CTX_DIR（KEEP_CTX=0 时下次会清掉）"
+# 必须用 \${CTX_DIR}：macOS bash 3.2 会把紧跟的全角「（」算进变量名
+echo "[build-combined] context 保留在 ${CTX_DIR}（KEEP_CTX=0 时下次会清掉）"

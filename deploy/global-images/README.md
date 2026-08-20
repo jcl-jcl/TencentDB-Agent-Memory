@@ -2,6 +2,8 @@
 
 全局三件套镜像的本地拉起脚本 —— `memory-core` + `memory-hub` + `proxy`，可各自独立运行，也能一条命令全部启动。
 
+配置项默认开/关与作用见 [**CONFIG_CN.md**](./CONFIG_CN.md)。
+
 ## 组件与端口
 
 | 组件 | 容器名 | 镜像（Docker Hub 公开） | 宿主机端口 | 用途 |
@@ -180,14 +182,12 @@ export ANTHROPIC_API_KEY=any-string-if-auth-disabled
 # 使用 openai 协议的客户端类似：OPENAI_BASE_URL=http://localhost:8096/v1
 ```
 
-Panel UI "客户端接入地址" 卡片会自动拼上宿主机的 LAN IP + `PROXY_PORT`（例如
-`http://192.168.1.100:8096/codebuddy/default`），别人的电脑复制过去就能直接连过来。
-由 `MEMORY_HUB_PROXY_PUBLIC_URL`（未设时脚本用 `hostname -I` / macOS `ipconfig getifaddr en0`
-自动探测，探不到才回落 `localhost`）注入到 memory-hub 里的 `metadata-instances.json.proxy_endpoint`。
+Panel UI「客户端接入地址」卡片和 Proxy 注入进 prompt 的 bridge curl base，都来自
+`MEMORY_HUB_PROXY_PUBLIC_URL`。未设时：卡片探测 LAN IP + `PROXY_PORT`；bridge curl
+回落到容器网卡 IP。公司 Nginx / 域名入口必须显式写成对外 origin（不要带 `:8096`
+或路径），例如 `MEMORY_HUB_PROXY_PUBLIC_URL=https://memhub.example.com`。
 Panel 后端 → Kernel 的转发不受此变量影响（始终走 `REMOTE_INSTANCE_URL` → memory-core:8420）。
-自动探测的地址不对时（多网卡 / 公网域名 / 反代前置），在 `.env` 显式设
-`MEMORY_HUB_PROXY_PUBLIC_URL=http://<真值>:8096`。想让 UI 卡片走老行为（回落到
-gateway_endpoint）就把 `MEMORY_HUB_PROXY_PUBLIC_URL` 显式设为空字符串。
+想让 UI 卡片走老行为（回落到 gateway_endpoint）就把该变量显式设为空字符串。
 
 `proxy` 默认关闭 `auth` / `sessionInit` / `costGuard`（这些依赖内部服务），只做纯转发 + `tdai-memory` 上下文注入（injector 名称，非容器名）。要开启完整流水线，需要另行配置 —— 参见 `context_proxy/config.example.yaml`。
 
