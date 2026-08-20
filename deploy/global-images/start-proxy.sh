@@ -120,6 +120,16 @@ skill:
   endpoint: "http://memory-core:8420"
   serviceToken: "${MEMORY_CORE_GATEWAY_API_KEY}"
 
+# 注册 <knowledge_tools>：injectors 含 knowledge + enabled + serviceToken 非空。
+# .env 里 MEMORY_CORE_GATEWAY_API_KEY 必须留空（Core Bearer 关，否则 proxy auth/verify 失败）；
+# 本脚本把空值默认成 local，只为满足 Proxy 的 token 非空检查。Core 不校验这个 Bearer。
+knowledge:
+  enabled: true
+  endpoint: "http://memory-core:8420"
+  serviceToken: "${MEMORY_CORE_GATEWAY_API_KEY}"
+  serviceId: default
+  timeoutMs: 5000
+
 auth:
   enabled: $(bool $PROXY_ENABLE_AUTH)
   url: "http://memory-core:8420"

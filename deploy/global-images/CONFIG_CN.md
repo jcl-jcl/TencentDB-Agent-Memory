@@ -25,7 +25,7 @@
 | Session Init（选 Team/Agent/Task） | **开** | 关 | 新会话弹表单绑定资产；依赖 Auth | `PROXY_ENABLE_SESSION_INIT` |
 | Tdai 记忆注入（L0 写入 / L2L3 注入） | **开** | 关 | 对话写入 Core，并把画像/场景注入 prompt | `PROXY_ENABLE_TDAI` |
 | Skill 注入（`<cloud_skills>` / `<skill_tools>`） | **开** | **开** | 把可复用 skill 注入 system prompt | `injection.injectors` 含 `skill`（脚本写死） |
-| Knowledge 工具注入（`<knowledge_tools>`） | **关** | **关** | 把 wiki / code-graph 的 tools 入口注入 prompt，供 Agent curl KS | 见 [§4.3](#43-knowledge-注入默认关) |
+| Knowledge 工具注入（`<knowledge_tools>`） | **开** | **开** | 把 wiki / code-graph 的 tools 入口注入 prompt，供 Agent curl KS | 见 [§4.3](#43-knowledge-注入) |
 | Cost Guard | **关** | **关** | 按费用/模型做路由与拦截 | 脚本写死 `costGuard.enabled: false` |
 | Redis | **关** | **关** | 多副本共享 session / 限流计数 | 脚本写死 `redis.enabled: false` |
 | Gateway Bearer 鉴权 | **关** | **关** | Core 要求 `Authorization: Bearer` | `.env` 里 `MEMORY_CORE_GATEWAY_API_KEY` 留空 |
@@ -148,7 +148,8 @@ admin 的 `user_key` **不是** `.env` 项：首次启动随机生成，写在 `
 | `tdai.memory.recallL1` | `true` | 配置了 L1 召回（当前注入器不再每轮塞进 user prompt，避免打爆 prompt cache） |
 | `tdai.memory.injectL2L3` | `true` | 把 L2 场景 / L3 画像注入 system prompt |
 | `injection.enabled` | `true` | 注入管线总开关 |
-| `injection.injectors` | `skill`, `knowledge`, `tdai-memory` | 要挂哪些注入器（knowledge 还要看下一节） |
+| `injection.injectors` | `skill`, `knowledge`, `tdai-memory` | 要挂哪些注入器 |
+| `knowledge.enabled` | `true` | 注册 `<knowledge_tools>`。还要 `serviceToken` 非空（脚本在 Gateway Key 留空时写 `local`） |
 | `injection.externalGatewayUrl` | 来自 `MEMORY_HUB_PROXY_PUBLIC_URL`（未设则省略） | prompt 里 skill/memory/session-bridge 的 curl base。未写时 Proxy 回落到容器网卡 IP |
 | `extraction.enabled` | **开**（YAML 未写，走代码默认） | 对话结束后抽 skill、写 L0 |
 
@@ -163,17 +164,9 @@ admin 的 `user_key` **不是** `.env` 项：首次启动随机生成，写在 `
 | `opik` / `langfuse` / `clickhouse` | **关** | 可观测与用量上报 | 在完整 YAML 里配 |
 | `skillRuntime.allowLlmWrite` | **关** | 是否允许模型经 skill-bridge **写入** skill | 默认只读检索 |
 
-### 4.3 Knowledge 注入默认关
+### 4.3 Knowledge 注入
 
-脚本虽然把 `knowledge` 写进了 `injection.injectors`，但 **没有** 写 `knowledge.enabled: true`。Proxy 代码要求三者同时成立才会注册 `<knowledge_tools>`：
-
-1. injectors 含 `knowledge`
-2. `knowledge.enabled == true`
-3. `knowledge.serviceToken` 非空
-
-因此当前开源一键部署里：**知识库仍可在 Panel 里建，Agent 不会自动在 prompt 里看到 tools 入口。**
-
-若要打开，在 `start-proxy.sh` 生成的 YAML 里补：
+`start-proxy.sh` 会写出：
 
 ```yaml
 knowledge:
@@ -181,9 +174,16 @@ knowledge:
   endpoint: "http://memory-core:8420"
   serviceToken: "${MEMORY_CORE_GATEWAY_API_KEY}"
   serviceId: default
+  timeoutMs: 5000
 ```
 
-注意：`MEMORY_CORE_GATEWAY_API_KEY` 为空时 `serviceToken` 也是空，第 3 条仍不满足。这是已知限制，与 Bearer 门必须留空是同一件事。
+Proxy 要注册 `<knowledge_tools>`，三条都要成立：injectors 含 `knowledge`、`enabled: true`、`serviceToken` 非空。
+
+`.env` 里 `MEMORY_CORE_GATEWAY_API_KEY` **必须留空**（Core Bearer 关，否则 proxy 的 `auth/verify` 不带 Bearer 会失败）。脚本把空值默认成 `local`，只为让 `serviceToken` 非空；Core 不校验这个 Bearer。
+
+注入内容是**当前会话 Agent 绑过的** Wiki / CodeGraph（`agent-fixed-asset`），不是 Team 下全部知识。没绑、或 ingest 未完成 → 日志 `listAgentKnowledgeIds → 0 ids`，prompt 里没有 `<knowledge_tools>`。
+
+排查：`docker logs tdai-proxy | grep knowledge-tools-injector`；system prompt 里搜 `<knowledge_tools>`。块里的 `url=` 来自创建知识时的 `KNOWLEDGE_PUBLIC_BASE_URL`。
 
 ---
 
